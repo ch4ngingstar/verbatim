@@ -19,7 +19,7 @@ _PROFILE_FIELDS: dict[str, Any] = {
 }
 
 
-def _decode_project(row: Any) -> dict:  # type: ignore[type-arg]
+def _decode_project(row: Any) -> dict[str, Any]:
     proj = dict(row)
     proj["pov_characters"] = json.loads(proj["pov_characters"])
     return proj
@@ -70,17 +70,17 @@ class ProjectOps:
                     )
         return project_id
 
-    def get_project_by_id(self, project_id: int) -> "dict | None":  # type: ignore[type-arg]
+    def get_project_by_id(self, project_id: int) -> "dict[str, Any] | None":
         with self.db.conn() as conn:
             row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
             return _decode_project(row) if row else None
 
-    def get_project(self, name: str) -> "dict | None":  # type: ignore[type-arg]
+    def get_project(self, name: str) -> "dict[str, Any] | None":
         with self.db.conn() as conn:
             row = conn.execute("SELECT * FROM projects WHERE name=?", (name,)).fetchone()
             return _decode_project(row) if row else None
 
-    def list_projects(self) -> list[dict]:  # type: ignore[type-arg]
+    def list_projects(self) -> list[dict[str, Any]]:
         with self.db.conn() as conn:
             rows = conn.execute("SELECT * FROM projects ORDER BY created_at DESC").fetchall()
             return [_decode_project(r) for r in rows]
