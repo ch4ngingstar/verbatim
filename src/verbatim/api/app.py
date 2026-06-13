@@ -47,7 +47,6 @@ from verbatim.api.models import (
     M4BExportRequest,
     NovelProfileUpdate,
     PipelineStart,
-    ProjectCreate,
     VoiceAdd,
 )
 from verbatim.api.pipeline_manager import PipelineManager
@@ -67,6 +66,23 @@ def _mp3_dir() -> Path:
 
 def _m4b_dir() -> Path:
     return config.data_root() / "m4b"
+
+
+def _epubs_dir() -> Path:
+    return config.data_root() / "epubs"
+
+
+def _project_status(progress: dict[str, Any]) -> str:
+    """Compute a summary project status from chapter progress counts."""
+    if progress["total"] == 0:
+        return "idle"
+    if progress["error"] > 0:
+        return "error"
+    if progress["complete"] == progress["total"]:
+        return "complete"
+    return "idle"
+
+
 _ALLOWED_VOICE_EXTS = {".wav", ".mp3", ".flac", ".ogg"}
 _VOICE_MEDIA_TYPES = {
     ".wav": "audio/wav",
@@ -117,25 +133,32 @@ async def health() -> dict[str, str]:
 
 @app.post("/api/projects", status_code=201)
 async def create_project(
-    req: ProjectCreate,
+    epub: UploadFile = File(...),
     sm: StateManager = Depends(get_sm),
 ) -> dict[str, Any]:
-    epub_path = Path(req.epub_path)
-    if not epub_path.exists():
-        raise HTTPException(400, f"EPUB not found: {req.epub_path}")
-
-    parsed = await asyncio.to_thread(parse_epub, req.epub_path)
+    if not (epub.filename or "").lower().endswith(".epub"):
+        raise HTTPException(400, "Only .epub files are accepted.")
+    content = await epub.read()
+    if not content:
+        raise HTTPException(400, "Uploaded EPUB is empty.")
+    _epubs_dir().mkdir(parents=True, exist_ok=True)
+    dest = _epubs_dir() / (epub.filename or "upload.epub")
+    dest.write_bytes(content)
+    parsed = await asyncio.to_thread(parse_epub, str(dest))
     project_id = sm.seed_project(parsed)
     project = sm.get_project_by_id(project_id)
-    return {"project_id": project_id, "project": project,
-            "progress": sm.get_progress(project_id)}
+    progress = sm.get_progress(project_id)
+    if project:
+        project["status"] = _project_status(progress)
+    return {"project": project}
 
 
 @app.get("/api/projects")
 async def list_projects(sm: StateManager = Depends(get_sm)) -> dict[str, Any]:
     projects = sm.list_projects()
     for p in projects:
-        p["progress"] = sm.get_progress(p["id"])
+        progress = sm.get_progress(p["id"])
+        p["status"] = _project_status(progress)
     return {"projects": projects}
 
 
@@ -147,7 +170,9 @@ async def get_project(
     project = sm.get_project_by_id(project_id)
     if not project:
         raise HTTPException(404, f"Project {project_id} not found.")
-    return {"project": project, "progress": sm.get_progress(project_id)}
+    progress = sm.get_progress(project_id)
+    project["status"] = _project_status(progress)
+    return {"project": project}
 
 
 @app.patch("/api/projects/{project_id}/profile")
@@ -163,6 +188,8 @@ async def update_novel_profile(
     project = sm.get_project_by_id(project_id)
     if not project:
         raise HTTPException(404, f"Project {project_id} not found.")
+    progress = sm.get_progress(project_id)
+    project["status"] = _project_status(progress)
     return {"project": project}
 
 
@@ -253,6 +280,30 @@ async def reset_chapter(
     return {"reset": chapter_id}
 
 
+@app.delete("/api/chapters/{chapter_id}/audio")
+async def delete_chapter_audio(
+    chapter_id: int,
+    sm: StateManager = Depends(get_sm),
+) -> dict[str, Any]:
+    """Delete assembled audio and set status back to tts_done so re-assembly can run."""
+    with sm.db.conn() as conn:
+        row = conn.execute(
+            "SELECT output_audio_path, status FROM chapters WHERE id=?", (chapter_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "Chapter not found.")
+    if row["output_audio_path"]:
+        p = config.from_stored(row["output_audio_path"])
+        if p.exists():
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    sm.delete_chapter_audio(chapter_id)
+    sm.mark_chapter_status(chapter_id, "tts_done")
+    return {"deleted_audio": chapter_id}
+
+
 # -- Characters / Casting -----------------------------------------------------
 
 @app.get("/api/characters/{project_id}")
@@ -270,7 +321,7 @@ async def upsert_character(
     req: CharacterUpsert,
     sm: StateManager = Depends(get_sm),
 ) -> dict[str, Any]:
-    char_id = sm.upsert_character(
+    sm.upsert_character(
         project_id=project_id,
         name=req.name.strip(),
         aliases=req.aliases,
@@ -278,7 +329,9 @@ async def upsert_character(
         is_pov=req.is_pov,
         status=req.status,
     )
-    return {"character_id": char_id}
+    chars = sm.list_characters(project_id)
+    char = next((c for c in chars if c["name"] == req.name.strip()), None)
+    return {"character": char}
 
 
 @app.patch("/api/characters/{character_id}/voice")
@@ -292,7 +345,13 @@ async def assign_character_voice(
     if voice is None:
         raise HTTPException(404, f"Voice '{req.voice_name}' not found in library.")
     sm.assign_voice(character_id, voice["id"])
-    return {"character_id": character_id, "voice_name": req.voice_name}
+    with sm.db.conn() as conn:
+        row = conn.execute("SELECT project_id FROM characters WHERE id=?", (character_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Character not found.")
+    chars = sm.list_characters(row["project_id"])
+    char = next((c for c in chars if c["id"] == character_id), None)
+    return {"character": char}
 
 
 # -- Voice library ------------------------------------------------------------

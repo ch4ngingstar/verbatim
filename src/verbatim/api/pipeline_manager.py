@@ -19,6 +19,7 @@ class PipelineManager:
         self.orchestrator: PipelineOrchestrator | None = None
         self.thread: threading.Thread | None = None
         self.status: str = "idle"  # idle | running | paused | complete | stopped | error
+        self.project_id: int | None = None
         self.last_results: dict[str, Any] | None = None
         self._subscribers: list[asyncio.Queue[dict[str, Any]]] = []
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -68,6 +69,7 @@ class PipelineManager:
             cfg=cfg,
             progress_callback=self._on_progress,
         )
+        self.project_id = project_id
         self.status = "running"
 
         def _run() -> None:
@@ -97,10 +99,15 @@ class PipelineManager:
             self.status = "stopped"
 
     def get_status(self) -> dict[str, Any]:
+        # Map internal status names to the UI's PipelineStatus.state values.
+        # complete/stopped/error all mean the pipeline is no longer active → 'idle'
+        _state_map = {"idle": "idle", "running": "running", "paused": "paused",
+                      "stopping": "stopping", "stopped": "idle", "complete": "idle",
+                      "error": "idle"}
+        state = _state_map.get(self.status, "idle")
         events = list(self.orchestrator.events) if self.orchestrator else []
         return {
-            "status":       self.status,
-            "last_results": self.last_results,
-            "event_count":  len(events),
-            "last_event":   events[-1] if events else None,
+            "state":      state,
+            "project_id": self.project_id if state != "idle" else None,
+            "last_event": events[-1] if events else None,
         }

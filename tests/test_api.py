@@ -110,7 +110,7 @@ def test_start_pipeline_project_not_found(client: TestClient) -> None:
 def test_pipeline_status_idle(client: TestClient) -> None:
     r = client.get("/api/pipeline/status")
     assert r.status_code == 200
-    assert r.json()["status"] == "idle"
+    assert r.json()["state"] == "idle"
 
 
 def test_pipeline_pause_resume_stop_no_error(client: TestClient) -> None:
@@ -155,7 +155,7 @@ def test_upsert_character(tmp_path: Path, client: TestClient, tmp_sm: StateManag
         "name": "Sunny", "aliases": ["Sunless King"], "status": "cast"
     })
     assert r.status_code == 201
-    assert "character_id" in r.json()
+    assert r.json()["character"]["name"] == "Sunny"
 
 
 # -- Voices -------------------------------------------------------------------
