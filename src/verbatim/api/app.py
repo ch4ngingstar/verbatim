@@ -142,7 +142,7 @@ async def create_project(
     if not content:
         raise HTTPException(400, "Uploaded EPUB is empty.")
     _epubs_dir().mkdir(parents=True, exist_ok=True)
-    dest = _epubs_dir() / (epub.filename or "upload.epub")
+    dest = _epubs_dir() / Path(epub.filename or "upload.epub").name
     dest.write_bytes(content)
     parsed = await asyncio.to_thread(parse_epub, str(dest))
     project_id = sm.seed_project(parsed)
