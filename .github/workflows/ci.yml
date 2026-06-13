@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -e ".[dev]"
+          python -m spacy download en_core_web_sm
+      - name: Lint
+        run: ruff check .
+      - name: Typecheck
+        run: mypy src
+      - name: Test
+        run: pytest -v
