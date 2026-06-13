@@ -288,3 +288,69 @@ def test_analyze_project_ok(
     assert "profile_updates" in body
     names = [c["name"] for c in body["characters"]]
     assert "Sunny" in names
+
+
+# -- M4B export ---------------------------------------------------------------
+
+from verbatim.audio.m4b import M4BExporter  # noqa: E402
+
+
+def test_export_m4b_project_not_found(client: TestClient) -> None:
+    r = client.post("/api/export/m4b", json={"project_id": 9999})
+    assert r.status_code == 404
+
+
+def test_export_m4b_no_complete_chapters(
+    tmp_path: Path, client: TestClient, tmp_sm: StateManager
+) -> None:
+    # _seed_project inserts a chapter with status='complete' but NULL output_audio_path.
+    # The route filters on both status AND output_audio_path being set, so this → 409.
+    pid = _seed_project(tmp_sm, tmp_path)
+    r = client.post("/api/export/m4b", json={"project_id": pid})
+    assert r.status_code == 409
+
+
+def test_export_m4b_ok(
+    tmp_path: Path,
+    client: TestClient,
+    tmp_sm: StateManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import verbatim.config as cfg
+
+    pid = _seed_project(tmp_sm, tmp_path)
+
+    # Plant a fake audio file under the data root so to_stored() works
+    audio_dir = cfg.data_root() / "output"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    fake_mp3 = audio_dir / "ch_0001.mp3"
+    fake_mp3.write_bytes(b"ID3FAKE")
+    stored = cfg.to_stored(fake_mp3)
+
+    # Mark the seeded chapter complete with a valid audio path
+    with tmp_sm.db.conn() as conn:
+        conn.execute(
+            "UPDATE chapters SET status='complete', output_audio_path=? WHERE project_id=?",
+            (stored, pid),
+        )
+
+    # Patch M4BExporter.export to skip actual FFmpeg and return a real file
+    def fake_export(
+        self: M4BExporter,
+        chapter_mp3s: list,
+        output_path: object,
+        book_title: str = "",
+        author: str = "",
+        cover_path: object = None,
+    ) -> Path:
+        out = tmp_path / "out.m4b"
+        out.write_bytes(b"ftyp")
+        return out
+
+    monkeypatch.setattr(M4BExporter, "export", fake_export)
+
+    r = client.post("/api/export/m4b", json={"project_id": pid})
+    assert r.status_code == 200
+    body = r.json()
+    assert "path" in body
+    assert body.get("size_bytes", 0) > 0
