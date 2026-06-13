@@ -2,7 +2,9 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { SSEEvent } from '@/lib/types'
 
-const SSE_URL = 'http://localhost:8000/api/events'
+// SSE must connect directly (not through Next.js rewrites) to avoid response buffering.
+const _API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '')
+const SSE_URL = `${_API}/api/events`
 const RECONNECT_BASE_MS = 1500
 const RECONNECT_MAX_MS  = 30_000
 
