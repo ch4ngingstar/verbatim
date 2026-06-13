@@ -18,6 +18,12 @@ class NovelProfileUpdate(BaseModel):
     narrator_notes:     str | None = None
 
 
+class CastingAnalyzeRequest(BaseModel):
+    llm_model_path:   str
+    n_chapters:       int = 10
+    llm_n_gpu_layers: int = -1
+
+
 # -- Pipeline -----------------------------------------------------------------
 
 class PipelineStart(BaseModel):

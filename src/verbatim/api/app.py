@@ -42,6 +42,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from verbatim import config
 from verbatim.api.models import (
+    CastingAnalyzeRequest,
     CharacterUpsert,
     CharacterVoiceAssign,
     M4BExportRequest,
@@ -50,6 +51,7 @@ from verbatim.api.models import (
     VoiceAdd,
 )
 from verbatim.api.pipeline_manager import PipelineManager
+from verbatim.casting.director import CastingDirector
 from verbatim.db.manager import StateManager
 from verbatim.ingest.epub import parse_epub
 from verbatim.pipeline.orchestrator import OrchestratorConfig
@@ -208,6 +210,46 @@ async def update_novel_profile(
     progress = sm.get_progress(project_id)
     project["status"] = _project_status(progress, project_id, mgr.get_status())
     return {"project": project}
+
+
+@app.post("/api/projects/{project_id}/analyze", status_code=200)
+async def analyze_project(
+    project_id: int,
+    req: CastingAnalyzeRequest,
+    sm: StateManager = Depends(get_sm),
+) -> dict[str, Any]:
+    """Run CastingDirector on the first N chapters and return the draft profile + cast."""
+    project = sm.get_project_by_id(project_id)
+    if not project:
+        raise HTTPException(404, f"Project {project_id} not found.")
+
+    if not req.llm_model_path:
+        raise HTTPException(400, "llm_model_path is required.")
+
+    cfg = {"n_gpu_layers": req.llm_n_gpu_layers, "n_chapters": req.n_chapters}
+
+    def _run_analysis() -> dict[str, Any]:
+        with CastingDirector(req.llm_model_path, sm, project_id, cfg=cfg) as cd:
+            return cd.run()
+
+    try:
+        result = await asyncio.to_thread(_run_analysis)
+    except FileNotFoundError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+    profile_updates = {
+        k: result[k]
+        for k in ("pov_style", "pov_characters", "thought_convention", "narrator_notes")
+        if k in result
+    }
+
+    return {
+        "project_id": project_id,
+        "profile_updates": profile_updates,
+        "characters": result.get("characters", []),
+    }
 
 
 # -- Pipeline -----------------------------------------------------------------

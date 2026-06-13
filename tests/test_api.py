@@ -228,3 +228,63 @@ def test_add_and_delete_voice(
     r2 = client.delete(f"/api/voices/{vid}")
     assert r2.status_code == 200
     assert r2.json()["deleted"] == vid
+
+
+# -- Analyze (CastingDirector) ------------------------------------------------
+
+import json as _json
+
+from verbatim.casting.director import CastingDirector
+
+FAKE_CAST_RESPONSE = {
+    "pov_style": "third",
+    "thought_convention": "single_quotes",
+    "narrator_notes": "LitRPG world",
+    "characters": [
+        {"name": "Sunny", "aliases": ["Sunless"], "emotion_hint": "stoic", "importance": 10, "is_pov": True},
+        {"name": "Nephis", "aliases": [], "emotion_hint": "cold", "importance": 7, "is_pov": False},
+    ],
+}
+
+
+def test_analyze_project_not_found(client: TestClient) -> None:
+    r = client.post("/api/projects/999/analyze", json={
+        "llm_model_path": "models/fake.gguf",
+    })
+    assert r.status_code == 404
+
+
+def test_analyze_project_missing_model_path(
+    tmp_path: Path, client: TestClient, tmp_sm: StateManager
+) -> None:
+    pid = _seed_project(tmp_sm, tmp_path)
+    r = client.post(f"/api/projects/{pid}/analyze", json={"llm_model_path": ""})
+    assert r.status_code == 400
+
+
+def test_analyze_project_ok(
+    tmp_path: Path,
+    client: TestClient,
+    tmp_sm: StateManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pid = _seed_project(tmp_sm, tmp_path)
+
+    def fake_call_llm(self: CastingDirector, prompt: str) -> str:
+        return _json.dumps(FAKE_CAST_RESPONSE)
+
+    monkeypatch.setattr(CastingDirector, "_call_llm", fake_call_llm)
+    # Suppress model load if llama_cpp absent
+    monkeypatch.setattr(CastingDirector, "__enter__", lambda self: self)
+    monkeypatch.setattr(CastingDirector, "__exit__", lambda self, *_: None)
+
+    r = client.post(f"/api/projects/{pid}/analyze", json={
+        "llm_model_path": "models/fake.gguf",
+        "n_chapters": 3,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert "characters" in body
+    assert "profile_updates" in body
+    names = [c["name"] for c in body["characters"]]
+    assert "Sunny" in names
