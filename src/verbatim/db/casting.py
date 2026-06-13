@@ -124,3 +124,24 @@ class CastingOps:
     def delete_voice(self, voice_id: int) -> bool:
         with self.db.conn() as conn:
             return conn.execute("DELETE FROM voices WHERE id=?", (voice_id,)).rowcount > 0
+
+    def get_project_voice_map(self, project_id: int) -> dict[str, str]:
+        """Return {title-cased name or alias: stored voice path} for TTS resolution.
+
+        Covers every cast character with a voice assigned (names + all aliases)
+        plus the global '_default' voice if one is registered.
+        """
+        result: dict[str, str] = {}
+        for char in self.list_characters(project_id):
+            path = char.get("voice_path")
+            if not path:
+                continue
+            result[char["name"].strip().title()] = path
+            for alias in char.get("aliases", []):
+                if alias:
+                    result[alias.strip().title()] = path
+        for voice in self.list_voices():
+            if voice["name"] == "_default":
+                result["_default"] = voice["path"]
+                break
+        return result

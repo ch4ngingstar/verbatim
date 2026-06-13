@@ -31,6 +31,12 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+# FastAPI uses Depends() in function default args — that is the intended pattern.
+"src/verbatim/api/app.py" = ["B008"]
+# Test files insert to sys.path before project imports; E402 is unavoidable.
+"tests/*.py" = ["E402"]
+
 [tool.mypy]
 python_version = "3.11"
 disallow_untyped_defs = true
