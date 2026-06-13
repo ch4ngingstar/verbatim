@@ -3,7 +3,7 @@
 Composed from ops mixins so each concern stays in its own file:
   ProjectOps  - projects + Novel Profile
   ChapterOps  - chapters, chunks, lines, progress
-  CastingOps  - characters + global voice library   (Task 6)
+  CastingOps  - characters + global voice library   (Task 6 — not yet merged)
 """
 
 from pathlib import Path
