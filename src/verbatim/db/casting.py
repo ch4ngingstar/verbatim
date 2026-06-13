@@ -121,6 +121,24 @@ class CastingOps:
             voices.append(v)
         return voices
 
+    def get_voice_by_id(self, voice_id: int) -> "dict | None":
+        with self.db.conn() as conn:
+            row = conn.execute("SELECT * FROM voices WHERE id=?", (voice_id,)).fetchone()
+        if row is None:
+            return None
+        v = dict(row)
+        v["tags"] = json.loads(v["tags"])
+        return v
+
+    def get_voice_by_name(self, name: str) -> "dict | None":
+        with self.db.conn() as conn:
+            row = conn.execute("SELECT * FROM voices WHERE name=?", (name,)).fetchone()
+        if row is None:
+            return None
+        v = dict(row)
+        v["tags"] = json.loads(v["tags"])
+        return v
+
     def delete_voice(self, voice_id: int) -> bool:
         with self.db.conn() as conn:
             return conn.execute("DELETE FROM voices WHERE id=?", (voice_id,)).rowcount > 0

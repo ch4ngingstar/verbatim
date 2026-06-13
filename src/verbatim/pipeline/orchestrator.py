@@ -290,7 +290,7 @@ class PipelineOrchestrator:
 
         stored = config.to_stored(out)
         file_size = out.stat().st_size if out.exists() else None
-        self._sm.mark_chapter_status(chapter_id, "tts_done",
+        self._sm.mark_chapter_status(chapter_id, "assembled",
                                      audio_path=stored,
                                      file_size_bytes=file_size)
 

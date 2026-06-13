@@ -169,8 +169,10 @@ async def list_projects(
 ) -> dict[str, Any]:
     projects = sm.list_projects()
     mgr_status = mgr.get_status()
+    pids = [p["id"] for p in projects]
+    batch = sm.get_progress_batch(pids)
     for p in projects:
-        progress = sm.get_progress(p["id"])
+        progress = batch.get(p["id"], {"total": 0, "complete": 0, "error": 0})
         p["status"] = _project_status(progress, p["id"], mgr_status)
     return {"projects": projects}
 
@@ -355,8 +357,7 @@ async def assign_character_voice(
     req: CharacterVoiceAssign,
     sm: StateManager = Depends(get_sm),
 ) -> dict[str, Any]:
-    voices = sm.list_voices()
-    voice = next((v for v in voices if v["name"] == req.voice_name), None)
+    voice = sm.get_voice_by_name(req.voice_name)
     if voice is None:
         raise HTTPException(404, f"Voice '{req.voice_name}' not found in library.")
     sm.assign_voice(character_id, voice["id"])
@@ -435,8 +436,7 @@ async def serve_voice_audio(
     voice_id: int,
     sm: StateManager = Depends(get_sm),
 ) -> FileResponse:
-    voices = sm.list_voices()
-    voice = next((v for v in voices if v["id"] == voice_id), None)
+    voice = sm.get_voice_by_id(voice_id)
     if voice is None:
         raise HTTPException(404, f"Voice {voice_id} not found.")
     p = config.from_stored(voice["path"])

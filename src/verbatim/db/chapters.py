@@ -176,6 +176,32 @@ class ChapterOps:
             "pct_complete": round(complete / total * 100, 1) if total else 0.0,
         }
 
+    def get_progress_batch(self, project_ids: "list[int]") -> "dict[int, dict]":
+        """Return {project_id: progress_dict} for multiple projects in one query."""
+        if not project_ids:
+            return {}
+        placeholders = ",".join("?" * len(project_ids))
+        with self.db.conn() as conn:
+            rows = conn.execute(
+                f"SELECT project_id, status, COUNT(*) AS cnt FROM chapters "
+                f"WHERE project_id IN ({placeholders}) GROUP BY project_id, status",
+                project_ids,
+            ).fetchall()
+        result: dict[int, dict] = {pid: {
+            "total": 0, "pending": 0, "diarized": 0, "tts_done": 0,
+            "assembled": 0, "complete": 0, "error": 0, "pct_complete": 0.0,
+        } for pid in project_ids}
+        for row in rows:
+            pid, status, cnt = row["project_id"], row["status"], row["cnt"]
+            if pid in result:
+                result[pid][status] = cnt
+                result[pid]["total"] += cnt
+        for _pid, counts in result.items():
+            total = counts["total"]
+            complete = counts.get("complete", 0)
+            counts["pct_complete"] = round(complete / total * 100, 1) if total else 0.0
+        return result
+
     def get_line_progress(self, chapter_id: int) -> dict[str, Any]:
         with self.db.conn() as conn:
             rows = conn.execute(

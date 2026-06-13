@@ -57,3 +57,20 @@ def test_alias_map_resolution(sm, pid):
     sm.upsert_character(pid, "Nephis", aliases=["Changing Star", "Neph"])
     amap = sm.get_alias_map(pid)
     assert amap["nephis"] == amap["changing star"] == amap["neph"]
+
+
+def test_get_voice_by_id(sm, pid):
+    vid = sm.add_voice("TestVoice", "voices/test.wav", tags=["test"])
+    v = sm.get_voice_by_id(vid)
+    assert v is not None
+    assert v["name"] == "TestVoice"
+    assert v["tags"] == ["test"]
+    assert sm.get_voice_by_id(99999) is None
+
+
+def test_get_voice_by_name(sm, pid):
+    sm.add_voice("NamedVoice", "voices/named.wav")
+    v = sm.get_voice_by_name("NamedVoice")
+    assert v is not None
+    assert v["name"] == "NamedVoice"
+    assert sm.get_voice_by_name("no-such-voice") is None
