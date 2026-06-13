@@ -17,7 +17,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 try:
     from llama_cpp import Llama
@@ -28,13 +28,20 @@ except ImportError:
 
 from verbatim.db.manager import StateManager
 from verbatim.ingest.segmenter import (
-    KIND_DIALOGUE, KIND_PROSE, KIND_SYSTEM, KIND_THOUGHT,
-    SegmenterConfig, segment_chunk,
+    KIND_DIALOGUE,
+    KIND_PROSE,
+    KIND_SYSTEM,
+    KIND_THOUGHT,
+    SegmenterConfig,
+    segment_chunk,
 )
 from verbatim.llm.parsing import (
-    EMOTION_VOCAB, SYSTEM_SPEAKER,
-    allowed_speakers, extract_json_block, is_narrator_misattribution,
-    label_json_schema, parse_labels,
+    EMOTION_VOCAB,
+    SYSTEM_SPEAKER,
+    allowed_speakers,
+    is_narrator_misattribution,
+    label_json_schema,
+    parse_labels,
 )
 from verbatim.llm.prompts import build_system_prompt
 
@@ -112,9 +119,8 @@ class LLMDirector:
         log.info("Model loaded.")
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self._purge_vram()
-        return False
 
     def _purge_vram(self) -> None:
         if self._llm is not None:
@@ -224,7 +230,8 @@ class LLMDirector:
                 if speaker not in self._allowed or speaker == SYSTEM_SPEAKER:
                     speaker = self._pov_character
             elif kind == KIND_SYSTEM:
-                # Brackets carry notifications AND telepathic messages — keep any valid roster label.
+                # Brackets carry notifications AND telepathic messages — keep any valid roster
+                # label.
                 if speaker not in self._allowed:
                     speaker = SYSTEM_SPEAKER
             else:  # dialogue
@@ -273,7 +280,7 @@ class LLMDirector:
         if "qwen3" in self.model_path.name.lower():
             user_msg += "\n/no_think"
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(self.cfg["max_retries"]):
             temp = self.cfg["temperature"] if attempt == 0 else self.cfg["retry_temp"]
             try:

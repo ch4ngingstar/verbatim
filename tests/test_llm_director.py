@@ -5,7 +5,7 @@ import pytest
 
 from verbatim.db.manager import StateManager
 from verbatim.llm.director import LLMDirector
-from verbatim.llm.parsing import EMOTION_VOCAB, SYSTEM_SPEAKER
+from verbatim.llm.parsing import SYSTEM_SPEAKER
 
 
 def _lj(*labels):
@@ -72,9 +72,11 @@ def test_setup_builds_segmenter_config(sm):
 
 
 def test_setup_no_pov_character_fallback(sm):
-    pid = sm.seed_project({"source_epub": "t.epub", "total_chapters": 1,
-                           "chapters": [{"chapter_index": 0, "title": "C",
-                                         "chunks": [{"chunk_index": 0, "text": "x.", "word_count": 1}]}]})
+    pid = sm.seed_project({
+        "source_epub": "t.epub", "total_chapters": 1,
+        "chapters": [{"chapter_index": 0, "title": "C",
+                      "chunks": [{"chunk_index": 0, "text": "x.", "word_count": 1}]}],
+    })
     # Don't set pov_characters -> defaults to []
     d = LLMDirector(Path("fake.gguf"), sm, project_id=pid)
     d._setup_from_profile()
@@ -190,7 +192,7 @@ def test_fallback_preserves_all_text(sm):
     pid, ch_id = _seed(sm, [text], system_brackets=True)
 
     d = _make_director(sm, pid, lambda t, temperature=0.2: "not json }")
-    n = d.process_chapter(ch_id)
+    d.process_chapter(ch_id)
 
     lines = sm.get_lines_for_chapter(ch_id)
     src_words = sorted(re.findall(r"[a-z0-9']+", text.lower()))
