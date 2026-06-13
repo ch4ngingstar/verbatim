@@ -213,7 +213,7 @@ async def start_pipeline(
         llm_n_gpu_layers=req.llm_n_gpu_layers,
         tts_num_beams=req.tts_num_beams,
         vram_check_enabled=req.vram_check_enabled,
-        chapter_range=tuple(req.chapter_range) if req.chapter_range else None,
+        chapter_range=(req.chapter_range[0], req.chapter_range[1]) if req.chapter_range else None,
     )
     try:
         mgr.start(req.project_id, sm, cfg)
@@ -346,7 +346,9 @@ async def assign_character_voice(
         raise HTTPException(404, f"Voice '{req.voice_name}' not found in library.")
     sm.assign_voice(character_id, voice["id"])
     with sm.db.conn() as conn:
-        row = conn.execute("SELECT project_id FROM characters WHERE id=?", (character_id,)).fetchone()
+        row = conn.execute(
+            "SELECT project_id FROM characters WHERE id=?", (character_id,)
+        ).fetchone()
     if not row:
         raise HTTPException(404, "Character not found.")
     chars = sm.list_characters(row["project_id"])
