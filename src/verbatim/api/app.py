@@ -72,14 +72,22 @@ def _epubs_dir() -> Path:
     return config.data_root() / "epubs"
 
 
-def _project_status(progress: dict[str, Any]) -> str:
-    """Compute a summary project status from chapter progress counts."""
+def _project_status(
+    progress: dict[str, Any],
+    project_id: int = 0,
+    mgr_status: "dict[str, Any] | None" = None,
+) -> str:
+    """Compute project status, factoring in active pipeline state."""
     if progress["total"] == 0:
         return "idle"
     if progress["error"] > 0:
         return "error"
     if progress["complete"] == progress["total"]:
         return "complete"
+    if mgr_status and mgr_status.get("project_id") == project_id:
+        state = mgr_status.get("state", "idle")
+        if state in ("running", "paused"):
+            return state
     return "idle"
 
 
@@ -135,6 +143,7 @@ async def health() -> dict[str, str]:
 async def create_project(
     epub: UploadFile = File(...),
     sm: StateManager = Depends(get_sm),
+    mgr: PipelineManager = Depends(get_manager),
 ) -> dict[str, Any]:
     if not (epub.filename or "").lower().endswith(".epub"):
         raise HTTPException(400, "Only .epub files are accepted.")
@@ -149,16 +158,20 @@ async def create_project(
     project = sm.get_project_by_id(project_id)
     progress = sm.get_progress(project_id)
     if project:
-        project["status"] = _project_status(progress)
+        project["status"] = _project_status(progress, project_id, mgr.get_status())
     return {"project": project}
 
 
 @app.get("/api/projects")
-async def list_projects(sm: StateManager = Depends(get_sm)) -> dict[str, Any]:
+async def list_projects(
+    sm: StateManager = Depends(get_sm),
+    mgr: PipelineManager = Depends(get_manager),
+) -> dict[str, Any]:
     projects = sm.list_projects()
+    mgr_status = mgr.get_status()
     for p in projects:
         progress = sm.get_progress(p["id"])
-        p["status"] = _project_status(progress)
+        p["status"] = _project_status(progress, p["id"], mgr_status)
     return {"projects": projects}
 
 
@@ -166,12 +179,13 @@ async def list_projects(sm: StateManager = Depends(get_sm)) -> dict[str, Any]:
 async def get_project(
     project_id: int,
     sm: StateManager = Depends(get_sm),
+    mgr: PipelineManager = Depends(get_manager),
 ) -> dict[str, Any]:
     project = sm.get_project_by_id(project_id)
     if not project:
         raise HTTPException(404, f"Project {project_id} not found.")
     progress = sm.get_progress(project_id)
-    project["status"] = _project_status(progress)
+    project["status"] = _project_status(progress, project_id, mgr.get_status())
     return {"project": project}
 
 
@@ -180,6 +194,7 @@ async def update_novel_profile(
     project_id: int,
     req: NovelProfileUpdate,
     sm: StateManager = Depends(get_sm),
+    mgr: PipelineManager = Depends(get_manager),
 ) -> dict[str, Any]:
     updates = req.model_dump(exclude_none=True)
     if not updates:
@@ -189,7 +204,7 @@ async def update_novel_profile(
     if not project:
         raise HTTPException(404, f"Project {project_id} not found.")
     progress = sm.get_progress(project_id)
-    project["status"] = _project_status(progress)
+    project["status"] = _project_status(progress, project_id, mgr.get_status())
     return {"project": project}
 
 
