@@ -1,153 +1,175 @@
+<div align="center">
+
 # Verbatim
 
-Turn any novel EPUB into a multi-voice audiobook with per-character voices and per-line emotion — running entirely on a local GPU (~12 GB VRAM).
+**Local audiobook synthesis from any EPUB — per-character voices, per-line emotion, no cloud.**
+
+[![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Next.js](https://img.shields.io/badge/next.js-15-000000?style=flat-square&logo=nextdotjs)](https://nextjs.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen?style=flat-square)](#development)
+
+</div>
+
+---
+
+Upload a novel. Walk out with an M4B audiobook where every character has their own cloned voice and every line carries the right emotion — all processed on your own GPU with no API calls, no subscriptions, no data leaving your machine.
+
+## The problem it solves
+
+Most text-to-speech tools treat an entire book as one long string read by one voice. Verbatim reads the novel the way a producer would: identify the cast, assign voices, and deliver each line with the emotion the scene demands. A villain's dialogue sounds different from the narrator. A whispered threat sounds different from a scream.
 
 ## How it works
 
 ```
-EPUB parse → Casting Director (LLM) → [user review in UI] →
-  per chapter: diarize (LLM) → TTS (IndexTTS) → assemble (FFmpeg) → M4B
+EPUB
+ │
+ ├─ parse ──────────────────────────────── chapters, cover, metadata
+ │
+ ├─ Casting Director (LLM) ─────────────── Novel Profile draft + character list
+ │     └─ [you review & edit in the UI]
+ │
+ └─ per chapter ────────────────────────── resumable, chapter-gated
+       ├─ diarize    (LLM)   assign speaker + emotion to every line
+       ├─ synthesize (TTS)   IndexTTS zero-shot voice cloning, 8-dim emotion blend
+       └─ assemble   (FFmpeg) silence-padded MP3 → final M4B with chapter markers
 ```
 
-A local LLM reads the first few chapters to draft a **Novel Profile** — who the POV characters are, what thought convention the author uses, whether system brackets mean LitRPG status windows. You review and edit the cast in a browser UI, assign reference voice clips, then kick off the pipeline. Each line is synthesised with a per-character voice and an 8-dimensional emotion vector blended from the text. Chapters are assembled into MP3s and packaged into a single M4B with chapter markers.
+The LLM and TTS model are **never in VRAM simultaneously**. Each is a context manager: load on entry, `gc.collect()` + cache-clear on exit, nvidia-smi barrier between stages. On a 12 GB card this is the difference between it working and it not working.
 
-The LLM and TTS model are never loaded at the same time. Each is a context manager that loads on entry and explicitly frees VRAM on exit.
+## Novel Profile
+
+Every novel has constants that a generic pipeline can't know: who speaks in first person, whether `*italics*` are inner thoughts or stage directions, what `[System: ...]` brackets mean. Instead of hardcoding guesses, Verbatim asks a local LLM to draft a **Novel Profile** from the first few chapters — POV style, thought convention, narrator notes — and surfaces it for editing before any synthesis starts.
+
+This is the architectural centre of the project. The entire pipeline reads from the profile at runtime rather than making its own assumptions.
+
+## Features
+
+- **Zero-shot voice cloning** via IndexTTS — any 5–30 second WAV becomes a character voice
+- **8-dimension emotion vectors** mapped from dialogue context (angry, cold, frightened, desperate, …) blended into synthesis at configurable alpha
+- **Resumable pipeline** — chapters have a status state machine (`pending → diarized → tts_done → assembled → complete`); a crash or pause picks up exactly where it left off
+- **Live progress** over SSE — the UI updates in real time without polling
+- **Browser UI** — library view, casting studio for voice assignment, command deck for pipeline control
+- **GPU-free test suite** — 124 tests, no model files required; LLM and TTS are injectable seams
+
+## Tech stack
+
+| Layer | Stack |
+|---|---|
+| Backend | Python 3.11, FastAPI, SQLite, spaCy |
+| LLM inference | llama-cpp-python (GGUF, GPU offload) |
+| TTS synthesis | IndexTTS (zero-shot voice cloning) |
+| Audio | FFmpeg, soundfile |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
+| Real-time | Server-Sent Events |
 
 ## Requirements
 
-- Python 3.11+
-- Node.js 18+
-- FFmpeg on PATH
+- Python 3.11+, Node.js 18+
+- FFmpeg on `PATH`
 - NVIDIA GPU with ~12 GB VRAM
-- [IndexTTS](https://github.com/index-labs/IndexTTS) checkpoints
-- A GGUF-format LLM (e.g. Mistral 7B, Llama 3 8B) for diarization and casting
+- [IndexTTS](https://github.com/index-labs/IndexTTS) checkpoints (place under `index-tts/checkpoints/`)
+- Any GGUF LLM — Mistral 7B and Llama 3 8B tested
 
-## Installation
+## Getting started
 
 ```powershell
-# 1. Clone
 git clone https://github.com/ch4ngingstar/verbatim.git
 cd verbatim
 
-# 2. Backend
+# Backend
 python -m venv .venv
 .\.venv\Scripts\pip install -e ".[dev]"
 python -m spacy download en_core_web_sm
 
-# 3. Frontend
-cd ui
-npm install
-cd ..
-```
+# Frontend
+cd ui && npm install && cd ..
 
-Place IndexTTS checkpoints under `index-tts/checkpoints/` (the directory should contain `config.yaml`).
-
-## Quick start
-
-```powershell
+# Start everything
 .\start.ps1
 ```
 
-This creates `.env` and `ui/.env.local` on first run, starts the backend on port 8000 and the frontend on port 3000, and opens the browser automatically.
-
-Or start each server manually:
-
-```powershell
-# Backend
-cd src
-uvicorn verbatim.api.app:app --port 8000 --reload
-
-# Frontend (separate terminal)
-cd ui
-npm run dev
-```
+`start.ps1` handles first-run setup (creates `.env`, `ui/.env.local`, `data/`), launches both servers, and opens the browser. Backend at `:8000`, frontend at `:3000`.
 
 ## Configuration
 
-Copy `.env.example` to `.env`. The only required variables are:
-
 | Variable | Default | Description |
 |---|---|---|
-| `VERBATIM_DATA_DIR` | `./data` | Where the SQLite DB, audio files, voice clips, and covers are stored |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend URL (must also go in `ui/.env.local`) |
+| `VERBATIM_DATA_DIR` | `./data` | Root for the SQLite DB, audio, voices, covers |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend URL (copy to `ui/.env.local` too) |
 
-All file paths stored in the database are relative to `VERBATIM_DATA_DIR`, so the data directory is portable.
+All file paths in the database are stored relative to `VERBATIM_DATA_DIR` — moving the data directory doesn't break anything.
 
-## Usage
+## Using it
 
-1. Open `http://localhost:3000`
-2. Upload an EPUB — the book is parsed and appears in the library
-3. Click the project → **Casting Studio** tab
-4. Click **Analyze** to run the Casting Director (LLM) on the first few chapters
-5. Review the Novel Profile and character list, assign voice clips from the library
-6. Switch to the **Command Deck** tab, provide your model paths, and click **Start**
-7. Watch progress live via SSE; download the finished M4B when complete
+1. Open `http://localhost:3000` and upload an EPUB
+2. Click **Analyze** — the Casting Director runs the LLM over the first few chapters and returns a draft Novel Profile and character list
+3. Edit the profile (POV style, thought convention, narrator notes), add voices from the library, assign them to characters
+4. Switch to the Command Deck, provide your model paths, click **Start**
+5. Watch chapters process live; pause and resume at any chapter boundary
+6. Export the finished M4B when complete
+
+## API
+
+The FastAPI backend at `:8000` — interactive docs at `/docs`.
+
+```
+POST   /api/projects                    upload EPUB, create project
+GET    /api/projects/{id}               project detail + progress
+PATCH  /api/projects/{id}/profile       update Novel Profile
+POST   /api/projects/{id}/analyze       run Casting Director
+
+POST   /api/pipeline/start              start pipeline
+POST   /api/pipeline/pause|resume|stop  control pipeline
+GET    /api/pipeline/status             current state
+
+GET    /api/chapters/{project_id}       chapter list
+POST   /api/chapters/{id}/reset         reset to pending
+
+GET    /api/characters/{project_id}     character list
+POST   /api/characters/{project_id}     upsert character
+PATCH  /api/characters/{id}/voice       assign voice
+
+POST   /api/voices/upload               upload reference clip
+GET    /api/voices/{id}/audio           stream reference clip
+
+GET    /api/audio/{chapter_id}          stream chapter MP3
+POST   /api/export/m4b                  export full M4B
+
+GET    /api/events                      SSE progress stream
+```
 
 ## Development
 
 ```powershell
-# Run all tests (124, GPU-free)
+# All tests (GPU-free — LLM and TTS are monkeypatched)
 .\.venv\Scripts\python -m pytest -v
 
-# Lint + typecheck
+# Lint + types
 .\.venv\Scripts\python -m ruff check .
 .\.venv\Scripts\python -m mypy src
 
-# Frontend type check + tests
-cd ui
-npm run typecheck
-npm test
+# Frontend
+cd ui && npm run typecheck && npm test
 ```
 
-Tests monkeypatch `_call_llm` on the LLM director and `_synthesize` on the TTS engine so no GPU or model files are needed.
-
-## API
-
-The FastAPI backend exposes a REST API at `http://localhost:8000`:
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/health` | Health check |
-| `POST` | `/api/projects` | Upload EPUB, create project |
-| `GET` | `/api/projects` | List all projects |
-| `GET` | `/api/projects/{id}` | Project detail + progress |
-| `PATCH` | `/api/projects/{id}/profile` | Update Novel Profile |
-| `POST` | `/api/projects/{id}/analyze` | Run Casting Director |
-| `POST` | `/api/pipeline/start` | Start the pipeline |
-| `POST` | `/api/pipeline/pause` | Pause after current chapter |
-| `POST` | `/api/pipeline/resume` | Resume |
-| `POST` | `/api/pipeline/stop` | Stop after current chapter |
-| `GET` | `/api/pipeline/status` | Current pipeline state |
-| `GET` | `/api/chapters/{project_id}` | Chapter list |
-| `POST` | `/api/chapters/{id}/reset` | Reset chapter to pending |
-| `GET` | `/api/characters/{project_id}` | Character list |
-| `POST` | `/api/characters/{project_id}` | Upsert character |
-| `PATCH` | `/api/characters/{id}/voice` | Assign voice to character |
-| `GET` | `/api/voices` | Voice library |
-| `POST` | `/api/voices/upload` | Upload reference clip |
-| `DELETE` | `/api/voices/{id}` | Remove voice |
-| `GET` | `/api/audio/{chapter_id}` | Stream chapter MP3 |
-| `POST` | `/api/export/m4b` | Export full M4B |
-| `GET` | `/api/events` | SSE progress stream |
-
-Interactive docs: `http://localhost:8000/docs`
-
-## Project structure
+## Project layout
 
 ```
 src/verbatim/
-  db/          SQLite schema + StateManager facade
-  ingest/      EPUB parser, cover extraction, segmenter
+  db/          StateManager facade — ProjectOps, ChapterOps, CastingOps mixins
+  ingest/      EPUB parser, cover extraction, deterministic segmenter
   llm/         LLMDirector context manager, prompt templates
-  casting/     CastingDirector — drafts Novel Profile from first N chapters
-  tts/         TTSEngine, emotion vectors, voice map builder
-  audio/       FFmpeg chapter assembler, M4B exporter
-  pipeline/    Orchestrator — sequences stages, emits SSE events
+  casting/     CastingDirector — Novel Profile draft from first N chapters
+  tts/         TTSEngine, 8-dim emotion vectors, voice map builder
+  audio/       chapter assembler (FFmpeg), M4B exporter
+  pipeline/    PipelineOrchestrator — VRAM lifecycle, resume logic, SSE events
   api/         FastAPI routes, Pydantic models, pipeline thread wrapper
 ui/
-  app/         Next.js pages (library, project/casting/command deck)
+  app/         Next.js pages
   components/  CastingStudio, ChapterQueue, CommandStrip, Toasts
-  lib/         api.ts (sole API client), types.ts
+  lib/         api.ts, types.ts
 ```
 
 ## License
