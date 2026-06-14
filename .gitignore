@@ -10,3 +10,7 @@ data/
 .pytest_cache/
 node_modules/
 .next/
+ui/.env.local
+ui/next-env.d.ts
+ui/tsconfig.tsbuildinfo
+.claude/

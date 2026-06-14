@@ -31,6 +31,7 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+exclude = [".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

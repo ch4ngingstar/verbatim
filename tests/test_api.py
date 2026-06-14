@@ -241,7 +241,8 @@ FAKE_CAST_RESPONSE = {
     "thought_convention": "single_quotes",
     "narrator_notes": "LitRPG world",
     "characters": [
-        {"name": "Sunny", "aliases": ["Sunless"], "emotion_hint": "stoic", "importance": 10, "is_pov": True},
+        {"name": "Sunny", "aliases": ["Sunless"], "emotion_hint": "stoic", "importance": 10,
+         "is_pov": True},
         {"name": "Nephis", "aliases": [], "emotion_hint": "cold", "importance": 7, "is_pov": False},
     ],
 }
