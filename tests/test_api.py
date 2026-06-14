@@ -293,7 +293,30 @@ def test_analyze_project_ok(
 
 # -- M4B export ---------------------------------------------------------------
 
+import verbatim.audio.m4b as _m4b_mod  # noqa: E402
 from verbatim.audio.m4b import M4BExporter  # noqa: E402
+
+
+def _seed_project_with_audio(sm: StateManager, tmp_path: Path) -> int:
+    """Seed a project with one completed chapter that has audio on disk."""
+    import verbatim.config as cfg
+    audio_dir = cfg.data_root() / "output"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    fake_mp3 = audio_dir / "ch_0001.mp3"
+    fake_mp3.write_bytes(b"ID3FAKE")
+    stored = cfg.to_stored(fake_mp3)
+    with sm.db.conn() as conn:
+        conn.execute(
+            "INSERT INTO projects (name, source_epub, total_chapters) "
+            "VALUES ('AudioBook', 'book.epub', 1)"
+        )
+        pid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.execute(
+            "INSERT INTO chapters (project_id, chapter_index, title, status, output_audio_path) "
+            "VALUES (?, 0, 'Chapter 1', 'complete', ?)",
+            (pid, stored),
+        )
+    return pid
 
 
 def test_export_m4b_project_not_found(client: TestClient) -> None:
@@ -355,3 +378,84 @@ def test_export_m4b_ok(
     body = r.json()
     assert "path" in body
     assert body.get("size_bytes", 0) > 0
+
+
+def test_export_m4b_sanitizes_filename(
+    tmp_path: Path,
+    client: TestClient,
+    tmp_sm: StateManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Path traversal in output_filename must be stripped to basename only."""
+    import verbatim.config as cfg
+
+    pid = _seed_project_with_audio(tmp_sm, tmp_path)
+
+    monkeypatch.setattr(_m4b_mod, "_probe_duration_ms", lambda path, ffprobe_bin="ffprobe": 0)
+
+    def fake_export(
+        self: M4BExporter,
+        chapter_mp3s: list,
+        output_path: object,
+        book_title: str = "",
+        author: str = "",
+        cover_path: object = None,
+    ) -> Path:
+        out = Path(str(output_path))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"ftyp")
+        return out
+
+    monkeypatch.setattr(M4BExporter, "export", fake_export)
+
+    r = client.post(
+        "/api/export/m4b",
+        json={"project_id": pid, "output_filename": "../../evil.m4b"},
+    )
+    assert r.status_code == 200
+    returned_path = Path(r.json()["path"])
+    m4b_dir = cfg.data_root() / "m4b"
+    assert returned_path.parent == m4b_dir, (
+        f"output escaped m4b dir: {returned_path}"
+    )
+    assert returned_path.name == "evil.m4b"
+
+
+def test_export_m4b_uses_audio_duration(
+    tmp_path: Path,
+    client: TestClient,
+    tmp_sm: StateManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """duration_ms must come from ffprobe, not processing_seconds."""
+    probe_calls: list[int] = []
+
+    def fake_probe(path: object, ffprobe_bin: str = "ffprobe") -> int:
+        probe_calls.append(1)
+        return 42_000
+
+    monkeypatch.setattr(_m4b_mod, "_probe_duration_ms", fake_probe)
+
+    captured: list[dict] = []
+
+    def fake_export(
+        self: M4BExporter,
+        chapter_mp3s: list,
+        output_path: object,
+        book_title: str = "",
+        author: str = "",
+        cover_path: object = None,
+    ) -> Path:
+        captured.extend(chapter_mp3s)
+        out = Path(str(output_path))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"ftyp")
+        return out
+
+    monkeypatch.setattr(M4BExporter, "export", fake_export)
+
+    pid = _seed_project_with_audio(tmp_sm, tmp_path)
+    r = client.post("/api/export/m4b", json={"project_id": pid})
+    assert r.status_code == 200
+    assert len(probe_calls) > 0, "ffprobe was never called"
+    assert all(ch["duration_ms"] == 42_000 for ch in captured)

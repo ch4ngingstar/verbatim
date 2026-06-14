@@ -517,7 +517,7 @@ async def export_m4b(
     req: M4BExportRequest,
     sm: StateManager = Depends(get_sm),
 ) -> dict[str, Any]:
-    from verbatim.audio.m4b import M4BExporter
+    from verbatim.audio.m4b import M4BExporter, _probe_duration_ms
 
     project = sm.get_project_by_id(req.project_id)
     if not project:
@@ -536,13 +536,16 @@ async def export_m4b(
         chapter_data.append({
             "audio_path": str(p),
             "title": ch.get("title", ""),
-            "duration_ms": int((ch.get("processing_seconds") or 0) * 1000),
+            "duration_ms": _probe_duration_ms(p),
         })
 
     if not chapter_data:
         raise HTTPException(409, "No completed audio files found on disk.")
 
-    filename = req.output_filename or f"{project['name']}.m4b"
+    raw_name = req.output_filename or f"{project['name']}.m4b"
+    filename = Path(raw_name).name  # strip any directory components
+    if not filename.lower().endswith(".m4b"):
+        filename += ".m4b"
     _m4b_dir().mkdir(parents=True, exist_ok=True)
     output_path = _m4b_dir() / filename
 

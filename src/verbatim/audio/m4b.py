@@ -19,6 +19,28 @@ _DEFAULT_CFG: dict[str, Any] = {
 }
 
 
+def _probe_duration_ms(audio_path: "str | Path", ffprobe_bin: str = "ffprobe") -> int:
+    """Return audio duration in milliseconds via ffprobe, or 0 on failure."""
+    import json as _json
+    try:
+        result = subprocess.run(
+            [
+                ffprobe_bin, "-v", "quiet",
+                "-print_format", "json",
+                "-show_format",
+                str(audio_path),
+            ],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0:
+            data = _json.loads(result.stdout)
+            duration_s = float(data.get("format", {}).get("duration", 0))
+            return int(duration_s * 1000)
+    except Exception:
+        pass
+    return 0
+
+
 class M4BExporter:
     """Bundle ordered MP3 chapters into a single M4B audiobook with chapter markers."""
 
