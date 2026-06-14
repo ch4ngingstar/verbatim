@@ -15,7 +15,7 @@ fully before starting, honor its STOP conditions, and update your row when done.
 | [005](005-ui-tests-and-m4b-api-test.md) | UI component tests + M4B API test | P2 | M | — | DONE |
 | [006](006-m4b-duration-and-filename-fix.md) | Fix M4B chapter markers (duration + filename path traversal) | P1 | M | — | DONE |
 | [007](007-ffmpeg-subprocess-timeout.md) | Add timeout to FFmpeg subprocess calls | P1 | S | — | DONE |
-| [008](008-tts-engine-unload-gc-and-upload-limits.md) | TTSEngine gc.collect() on unload + file upload size limits | P2 | S | — | TODO |
+| [008](008-tts-engine-unload-gc-and-upload-limits.md) | TTSEngine gc.collect() on unload + file upload size limits | P2 | S | — | DONE |
 | [009](009-orchestrator-tests.md) | PipelineOrchestrator test coverage | P1 | M | — | TODO |
 | [010](010-frontend-ci-job.md) | Add frontend CI job (typecheck + vitest) | P2 | S | — | TODO |
 
