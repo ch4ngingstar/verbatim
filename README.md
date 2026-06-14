@@ -8,7 +8,8 @@
 [![Next.js](https://img.shields.io/badge/next.js-15-000000?style=flat-square&logo=nextdotjs)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen?style=flat-square)](#development)
+[![Tests](https://img.shields.io/badge/tests-137%20passing-brightgreen?style=flat-square)](#development)
+[![CI](https://github.com/ch4ngingstar/verbatim/actions/workflows/ci.yml/badge.svg)](https://github.com/ch4ngingstar/verbatim/actions/workflows/ci.yml)
 
 <br/>
 
@@ -40,7 +41,7 @@ EPUB
        └─ assemble   (FFmpeg) silence-padded MP3 → final M4B with chapter markers
 ```
 
-The LLM and TTS model are **never in VRAM simultaneously**. Each is a context manager: load on entry, `gc.collect()` + cache-clear on exit, nvidia-smi barrier between stages. On a 12 GB card this is the difference between it working and it not working.
+The LLM and TTS model are **never in VRAM simultaneously**. Each is a context manager: load on entry, `gc.collect()` + `torch.cuda.empty_cache()` on exit, nvidia-smi barrier between stages. On a 12 GB card this is the difference between it working and it not working.
 
 ## Novel Profile
 
@@ -55,7 +56,7 @@ This is the architectural centre of the project. The entire pipeline reads from 
 - **Resumable pipeline** — chapters have a status state machine (`pending → diarized → tts_done → assembled → complete`); a crash or pause picks up exactly where it left off
 - **Live progress** over SSE — the UI updates in real time without polling
 - **Browser UI** — library view, casting studio for voice assignment, command deck for pipeline control
-- **GPU-free test suite** — 124 tests, no model files required; LLM and TTS are injectable seams
+- **GPU-free test suite** — 137 tests covering API, pipeline orchestrator, TTS engine, and audio assembly; no model files required — LLM and TTS are injectable seams
 
 ## Tech stack
 
