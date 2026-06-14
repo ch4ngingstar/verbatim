@@ -10,6 +10,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen?style=flat-square)](#development)
 
+<br/>
+
+![Verbatim UI — library view, command deck, and casting studio](demo/demo.gif)
+
 </div>
 
 ---
