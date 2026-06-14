@@ -17,7 +17,7 @@ fully before starting, honor its STOP conditions, and update your row when done.
 | [007](007-ffmpeg-subprocess-timeout.md) | Add timeout to FFmpeg subprocess calls | P1 | S | — | DONE |
 | [008](008-tts-engine-unload-gc-and-upload-limits.md) | TTSEngine gc.collect() on unload + file upload size limits | P2 | S | — | DONE |
 | [009](009-orchestrator-tests.md) | PipelineOrchestrator test coverage | P1 | M | — | DONE |
-| [010](010-frontend-ci-job.md) | Add frontend CI job (typecheck + vitest) | P2 | S | — | TODO |
+| [010](010-frontend-ci-job.md) | Add frontend CI job (typecheck + vitest) | P2 | S | — | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with reason) | REJECTED (with rationale)
 
