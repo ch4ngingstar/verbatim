@@ -192,3 +192,41 @@ def test_m4b_raises_on_empty(tmp_path):
     exp = M4BExporter()
     with pytest.raises(ValueError, match="No chapters"):
         exp.export([], tmp_path / "out.m4b")
+
+
+# -- Timeout tests ------------------------------------------------------------
+
+def test_assembler_dispatch_ffmpeg_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """subprocess.TimeoutExpired from FFmpeg must become RuntimeError."""
+    import shutil
+    import subprocess as sp
+    from typing import Any
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+    def fake_run(*args: Any, **kwargs: Any) -> Any:
+        raise sp.TimeoutExpired(cmd=["ffmpeg"], timeout=300)
+
+    monkeypatch.setattr(sp, "run", fake_run)
+    asm = AudioAssembler()
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        asm._dispatch_ffmpeg(["ffmpeg", "-y", "output.mp3"])
+
+
+def test_m4b_dispatch_ffmpeg_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """subprocess.TimeoutExpired in M4BExporter must become RuntimeError."""
+    import shutil
+    import subprocess as sp
+    from typing import Any
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+    def fake_run(*args: Any, **kwargs: Any) -> Any:
+        raise sp.TimeoutExpired(cmd=["ffmpeg"], timeout=600)
+
+    monkeypatch.setattr(sp, "run", fake_run)
+    exp = M4BExporter()
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        exp._dispatch_ffmpeg(["ffmpeg", "-y", "output.m4b"])

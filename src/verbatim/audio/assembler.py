@@ -140,7 +140,12 @@ class AudioAssembler:
                 f"FFmpeg binary '{self._cfg['ffmpeg_bin']}' not found in PATH. "
                 "Install FFmpeg: https://ffmpeg.org/download.html"
             )
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "FFmpeg timed out after 300 s assembling chapter audio."
+            ) from exc
         if result.returncode != 0:
             raise RuntimeError(
                 f"FFmpeg failed (code {result.returncode}):\n{result.stderr[-2000:]}"

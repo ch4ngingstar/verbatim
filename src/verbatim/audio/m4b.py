@@ -164,7 +164,12 @@ class M4BExporter:
             raise RuntimeError(
                 f"FFmpeg binary '{self._cfg['ffmpeg_bin']}' not found in PATH."
             )
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "FFmpeg timed out after 600 s during M4B export."
+            ) from exc
         if result.returncode != 0:
             raise RuntimeError(
                 f"FFmpeg failed (code {result.returncode}):\n{result.stderr[-2000:]}"
