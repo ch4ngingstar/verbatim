@@ -4,6 +4,7 @@ Context manager loads IndexTTS2 once, synthesises all pending lines for a
 chapter, then unloads on exit. `_synthesize` is injectable for GPU-free tests.
 """
 
+import gc
 import logging
 import time
 from collections.abc import Callable
@@ -173,6 +174,8 @@ class TTSEngine:
             str(ref_path),
             text,
             output_path=None,
+            emo_vector=emo_vec,
+            emo_alpha=emo_alpha,
             num_beams=self._cfg["num_beams"],
             max_mel_tokens=self._cfg["max_new_tokens"],
         )
@@ -217,15 +220,15 @@ class TTSEngine:
 
         # indextts/ package lives one level above the checkpoints dir
         sys.path.insert(0, str(Path(self._cfg["tts_model_dir"]).parent))
-        from indextts.infer import IndexTTS  # type: ignore[import-not-found]
+        from indextts.infer_v2 import IndexTTS2  # type: ignore[import-not-found]
 
         cfg_path = str(Path(self._cfg["tts_model_dir"]) / "config.yaml")
-        tts = IndexTTS(
+        tts = IndexTTS2(
             model_dir=self._cfg["tts_model_dir"],
             cfg_path=cfg_path,
             use_fp16=False,
         )
-        log.info("IndexTTS loaded from %s", self._cfg["tts_model_dir"])
+        log.info("IndexTTS2 loaded from %s", self._cfg["tts_model_dir"])
         return tts
 
     def _unload_model(self) -> None:
@@ -235,6 +238,7 @@ class TTSEngine:
 
                 del self._tts
                 self._tts = None
+                gc.collect()
                 torch.cuda.empty_cache()
                 log.info("IndexTTS2 unloaded")
             except Exception as exc:  # noqa: BLE001

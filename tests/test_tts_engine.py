@@ -175,3 +175,23 @@ def test_partial_failure_marks_chapter_error(tmp_path, monkeypatch):
     chapter = next(c for c in sm.get_all_chapters(pid) if c["id"] == cid)
     assert chapter["status"] == "error"
     assert "failed_stage:tts" in (chapter.get("error_message") or "")
+
+
+def test_unload_calls_gc_collect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """_unload_model must call gc.collect() to release VRAM references promptly."""
+    import sys
+    import unittest.mock as mock
+
+    import verbatim.tts.engine as engine_mod
+    from verbatim.tts.engine import TTSEngine
+
+    fake_torch = mock.MagicMock()
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    sm = StateManager(tmp_path / "test.db")
+    engine = TTSEngine(sm, 1, tmp_path / "audio")
+    engine._tts = object()  # non-None so the inner block runs
+
+    with mock.patch.object(engine_mod, "gc") as mock_gc:
+        engine._unload_model()
+    mock_gc.collect.assert_called_once()

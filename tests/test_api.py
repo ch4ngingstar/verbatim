@@ -459,3 +459,34 @@ def test_export_m4b_uses_audio_duration(
     assert r.status_code == 200
     assert len(probe_calls) > 0, "ffprobe was never called"
     assert all(ch["duration_ms"] == 42_000 for ch in captured)
+
+
+# -- Upload size limits -------------------------------------------------------
+
+def test_upload_epub_too_large(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """EPUB uploads exceeding the size limit must return 413."""
+    import verbatim.api.app as app_mod
+    monkeypatch.setattr(app_mod, "_MAX_EPUB_BYTES", 500)
+    big = b"x" * 501
+    r = client.post(
+        "/api/projects",
+        files={"epub": ("big.epub", big, "application/epub+zip")},
+    )
+    assert r.status_code == 413
+
+
+def test_upload_voice_too_large(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Voice uploads exceeding the size limit must return 413."""
+    import verbatim.api.app as app_mod
+    monkeypatch.setattr(app_mod, "_MAX_VOICE_BYTES", 500)
+    big = b"x" * 501
+    r = client.post(
+        "/api/voices/upload",
+        data={"name": "testvoice"},
+        files={"file": ("big.wav", big, "audio/wav")},
+    )
+    assert r.status_code == 413

@@ -100,6 +100,8 @@ _VOICE_MEDIA_TYPES = {
     ".flac": "audio/flac",
     ".ogg": "audio/ogg",
 }
+_MAX_EPUB_BYTES  = 500 * 1024 * 1024   # 500 MB
+_MAX_VOICE_BYTES =  50 * 1024 * 1024   #  50 MB
 
 
 @asynccontextmanager
@@ -152,6 +154,8 @@ async def create_project(
     content = await epub.read()
     if not content:
         raise HTTPException(400, "Uploaded EPUB is empty.")
+    if len(content) > _MAX_EPUB_BYTES:
+        raise HTTPException(413, "EPUB file exceeds the 500 MB limit.")
     _epubs_dir().mkdir(parents=True, exist_ok=True)
     dest = _epubs_dir() / Path(epub.filename or "upload.epub").name
     dest.write_bytes(content)
@@ -454,6 +458,8 @@ async def upload_voice(
     content = await file.read()
     if not content:
         raise HTTPException(400, "Uploaded file is empty.")
+    if len(content) > _MAX_VOICE_BYTES:
+        raise HTTPException(413, "Voice clip exceeds the 50 MB limit.")
     _voices_dir().mkdir(parents=True, exist_ok=True)
     dest = _voices_dir() / f"{slug}{ext}"
     dest.write_bytes(content)
