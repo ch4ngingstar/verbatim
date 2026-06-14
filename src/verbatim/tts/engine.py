@@ -162,23 +162,20 @@ class TTSEngine:
         emo_vec: "list[float] | None",
         emo_alpha: float,
     ) -> bytes:
-        """Live IndexTTS2 synthesis — only called outside tests."""
+        """Live IndexTTS synthesis — only called outside tests."""
         import io
 
         import soundfile as sf  # type: ignore[import-untyped]
 
-        kwargs: dict[str, Any] = {
-            "text": text,
-            "prompt_speech_path": str(ref_path),
-            "num_beams": self._cfg["num_beams"],
-            "max_new_tokens": self._cfg["max_new_tokens"],
-        }
-        if emo_vec is not None and emo_alpha > 0.0:
-            kwargs["emo_vector"] = emo_vec
-            kwargs["emo_alpha"] = emo_alpha
-
         t0 = time.perf_counter()
-        audio, sr = self._tts.infer(**kwargs)
+        # output_path=None → returns (sample_rate, numpy_int16_array)
+        sr, audio = self._tts.infer(
+            str(ref_path),
+            text,
+            output_path=None,
+            num_beams=self._cfg["num_beams"],
+            max_mel_tokens=self._cfg["max_new_tokens"],
+        )
         elapsed = time.perf_counter() - t0
         log.debug("synthesised in %.1fs", elapsed)
 
@@ -208,21 +205,27 @@ class TTSEngine:
         return out.getvalue()
 
     def _load_model(self) -> Any:
+        import os
         import sys
 
-        sys.path.insert(0, str(Path(self._cfg["tts_model_dir"]).parent.parent))
+        # When running inside a venv, pull GPU packages (torch, torchaudio, soundfile)
+        # from the base Python installation where they are installed.
+        if sys.prefix != sys.base_prefix:
+            base_site = os.path.join(sys.base_prefix, "Lib", "site-packages")
+            if base_site not in sys.path:
+                sys.path.insert(0, base_site)
+
+        # indextts/ package lives one level above the checkpoints dir
+        sys.path.insert(0, str(Path(self._cfg["tts_model_dir"]).parent))
         from indextts.infer import IndexTTS  # type: ignore[import-not-found]
 
-        cfg_path = str(
-            Path(self._cfg["tts_model_dir"]) / "bigvgan_base_24khz_100band_256x" / "config.json"
-        )
+        cfg_path = str(Path(self._cfg["tts_model_dir"]) / "config.yaml")
         tts = IndexTTS(
             model_dir=self._cfg["tts_model_dir"],
             cfg_path=cfg_path,
-            is_half=False,
-            use_deepspeed=self._cfg["use_deepspeed"],
+            use_fp16=False,
         )
-        log.info("IndexTTS2 loaded from %s", self._cfg["tts_model_dir"])
+        log.info("IndexTTS loaded from %s", self._cfg["tts_model_dir"])
         return tts
 
     def _unload_model(self) -> None:
